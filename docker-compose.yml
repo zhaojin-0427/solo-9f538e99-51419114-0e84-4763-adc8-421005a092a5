@@ -1,0 +1,25 @@
+services:
+  registry:
+    build: .
+    image: stability-file-registry:local
+    container_name: stability-file-registry
+    ports:
+      - "8000:8000"
+    environment:
+      # Change this for any shared deployment; it only signs flash cookies.
+      SECRET_KEY: "change-me-before-sharing"
+      MAX_UPLOAD_BYTES: "20971520"
+    volumes:
+      # Registry rows and artifacts live here together so a restart sees a
+      # consistent pair. Keep this volume across container replacements.
+      - registry-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  registry-data:

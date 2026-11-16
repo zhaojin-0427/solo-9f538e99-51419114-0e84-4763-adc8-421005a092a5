@@ -1,0 +1,5 @@
+sample_id,timepoint_months,condition,assay_pct,impurity_a_pct,flag
+S-001,0,25C/60RH,99.8,0.05,ok
+S-001,3,25C/60RH,99.4,0.08,ok
+S-001,6,25C/60RH,98.9,0.12,ok
+S-002,0,25C/60RH,100.1,0.04,ok

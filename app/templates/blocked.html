@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}下载已停止 · {{ row.id }}{% endblock %}
+{% block content %}
+<section class="panel panel-blocked">
+  <h1>下载已停止</h1>
+  {% if missing %}
+    <p class="lead">
+      文件 <span class="mono">{{ row.id }}</span> 的登记在册，但磁盘上的载荷缺失或不可读；
+      为避免下发不完整数据，系统拒绝下载。
+    </p>
+  {% else %}
+    <p class="lead">
+      文件 <span class="mono">{{ row.id }}</span>
+      {% if row.revoked_at %}已被质控撤销{% else %}的上游
+        <a class="mono" href="{{ url_for('file_detail', file_id=blocker['id']) }}">{{ blocker['id'] }}</a> 已被撤销{% endif %}，
+      因此本文件不可下载。
+    </p>
+    <h2>阻断路径</h2>
+    <ol class="lineage">
+      {% for node in lineage %}
+        <li class="{% if node.revoked_at %}revoked{% else %}ok{% endif %}">
+          <a class="mono" href="{{ url_for('file_detail', file_id=node.id) }}">{{ node.id }}</a>
+          <span class="tag">{{ kind_labels[node.kind] }}</span>
+          {% if node.revoked_at %}<span class="badge badge-revoked">已撤销</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+    <p class="hint">该限制沿依赖链传递：只要任一上游被撤销，本文件及其所有下游都立即停止下载。修复件须使用新 ID 重新登记，旧派生件不会因此恢复。</p>
+  {% endif %}
+
+  {% if impact.all %}
+  <h2>受影响下游链</h2>
+  <ul class="chain-list">
+    {% for node in impact.all %}
+      <li><span class="mono">{{ node.id }}</span>
+          <span class="tag">{{ kind_labels[node.kind] }}</span>
+          <span class="muted">（第 {{ impact.depth[node.id] }} 层）</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p><a class="btn" href="{{ url_for('file_detail', file_id=row.id) }}">查看文件详情</a>
+     <a class="btn" href="{{ url_for('index') }}">返回文件清单</a></p>
+</section>
+{% endblock %}

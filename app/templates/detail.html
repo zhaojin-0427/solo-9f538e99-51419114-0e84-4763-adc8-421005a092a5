@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% set row = entry.row %}
+{% block title %}{{ row.id }} · 文件详情{% endblock %}
+{% block content %}
+
+<p class="crumbs"><a href="{{ url_for('index') }}">← 返回文件清单</a></p>
+
+<section class="panel detail-head {% if not entry.eligible %}panel-blocked{% endif %}">
+  <div class="detail-title">
+    <div>
+      <h1 class="mono">{{ row.id }}</h1>
+      <p class="sub">{{ row.original_filename }} · {{ kind_labels[row.kind] }} ·
+        登记于 {{ row.created_at }}</p>
+    </div>
+    <div class="status-block">
+      {% if row.revoked_at %}
+        <span class="badge badge-revoked badge-lg">已撤销</span>
+        <div class="sub">操作人 {{ row.revoked_by }} · {{ row.revoked_at }}</div>
+      {% elif entry.blocker %}
+        <span class="badge badge-blocked badge-lg">已停止下载</span>
+        <div class="sub">上游 <a class="mono" href="{{ url_for('file_detail', file_id=entry.blocker['id']) }}">{{ entry.blocker['id'] }}</a> 已撤销</div>
+      {% else %}
+        <span class="badge badge-live badge-lg">可下载</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <dl class="meta">
+    <div><dt>文件类型</dt><dd>{{ kind_labels[row.kind] }}</dd></div>
+    <div><dt>父文件</dt><dd>
+      {% if row.parent_id %}<a class="mono" href="{{ url_for('file_detail', file_id=row.parent_id) }}">{{ row.parent_id }}</a>
+      {% else %}<span class="muted">无（原始测量）</span>{% endif %}
+    </dd></div>
+    <div><dt>大小</dt><dd>{{ row.size_bytes }} B</dd></div>
+    <div><dt>SHA-256</dt><dd class="mono digest">{{ row.sha256 }}</dd></div>
+  </dl>
+
+  <div class="actions">
+    {% if entry.eligible %}
+      <a class="btn btn-primary" href="{{ url_for('download', file_id=row.id) }}">下载当前版本</a>
+    {% else %}
+      <span class="btn btn-disabled" aria-disabled="true">下载已停止</span>
+    {% endif %}
+  </div>
+
+  {% if not row.revoked_at %}
+  <form method="post" action="{{ url_for('revoke', file_id=row.id) }}" class="revoke-form"
+        data-file-id="{{ row.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h3>质控撤销</h3>
+    <p class="hint">撤销立即生效且不可恢复；修复件请用新 ID 重新登记（原派生件不会自动恢复）。</p>
+    <label for="operator">质控员 <span class="req">*</span></label>
+    <input id="operator" name="operator" required maxlength="120" placeholder="姓名或工号">
+    <button type="submit" class="btn btn-danger">撤销此文件</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>血缘链</h2>
+  <ol class="lineage">
+    {% for node in lineage %}
+      <li class="{% if not node.revoked_at %}ok{% else %}revoked{% endif %}">
+        <a class="mono" href="{{ url_for('file_detail', file_id=node.id) }}">{{ node.id }}</a>
+        <span class="tag">{{ kind_labels[node.kind] }}</span>
+        {% if node.revoked_at %}<span class="badge badge-revoked">已撤销</span>{% else %}<span class="badge badge-live">在册</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="panel">
+  <h2>受影响链（{% if row.revoked_at %}撤销后{% else %}若撤销则{% endif %}）</h2>
+  {% if not impact.all %}
+    <p class="empty">没有直接或间接依赖本文件的下游文件。</p>
+  {% else %}
+    <p class="hint">共 {{ impact.all | length }} 个下游文件：直接 {{ impact.direct | length }} 个，间接 {{ impact.indirect | length }} 个。撤销本文件后它们将立即停止下载。</p>
+    <div class="table-scroll">
+      <table class="grid">
+        <thead><tr><th>层级</th><th>文件 ID</th><th>类型</th><th>关系</th><th>当前状态</th></tr></thead>
+        <tbody>
+        {% for node in impact.all %}
+          <tr>
+            <td>{{ impact.depth[node.id] }}</td>
+            <td><a class="mono" href="{{ url_for('file_detail', file_id=node.id) }}">{{ node.id }}</a>
+                <div class="sub">{{ node.original_filename }}</div></td>
+            <td>{{ kind_labels[node.kind] }}</td>
+            <td>{{ '直接派生' if node.parent_id == row.id else '间接依赖' }}</td>
+            <td>
+              {% if node.revoked_at %}<span class="badge badge-revoked">已撤销</span>
+              {% else %}<span class="badge badge-live">在册</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>审计事件</h2>
+  <p class="hint">事件与状态变更在同一事务中写入，只追加、不可修改。</p>
+  <ul class="chain-list">
+    {% for event in events %}
+      <li><span class="mono">{{ event.at }}</span>
+        {% if event.action == 'register' %}
+          <span class="badge badge-live">登记</span>
+          {% if event.detail %}父项 <span class="mono">{{ event.detail }}</span>{% else %}原始测量{% endif %}
+        {% else %}
+          <span class="badge badge-revoked">撤销</span>操作人 {{ event.detail }}
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% if header %}
+<section class="panel">
+  <h2>内容预览（前 {{ preview | length }} 行）</h2>
+  <div class="table-scroll">
+    <table class="grid preview">
+      <thead><tr>{% for cell in header %}<th>{{ cell }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for line in preview %}<tr>{% for cell in line %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

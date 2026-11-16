@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}文件清单 · 稳定性试验{% endblock %}
+{% block content %}
+
+<section class="stats">
+  <div class="stat"><span class="stat-num">{{ stats.total }}</span><span>已登记文件</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.raw }}</span><span>原始测量</span></div>
+  <div class="stat"><span class="stat-num stat-alert">{{ stats.blocked }}</span><span>已停止下载</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.revoked }}</span><span>已撤销</span></div>
+</section>
+
+{% if error %}
+  <div class="flash flash-error" role="alert" data-error-code="{{ error.code }}">
+    <strong>登记未生效：</strong>{{ error.message }}
+  </div>
+{% endif %}
+
+<section class="panel" id="upload">
+  <h2>登记新文件</h2>
+  <p class="hint">
+    原始测量不填父项；清洗表须填写其原始测量的准确文件 ID；批次汇总须填写其清洗表（或上一层汇总）的准确 ID。
+    父项必须在提交时已登记且未撤销，登记后文件与依赖关系不可更改。
+  </p>
+  <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="file_id">文件 ID <span class="req">*</span></label>
+      <input id="file_id" name="file_id" required maxlength="64"
+             pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}"
+             placeholder="例如 RAW-2024-0116-A" value="{{ form.file_id or '' }}">
+      <small>登记后不可修改，修复件请使用新 ID。</small>
+    </div>
+    <div class="field">
+      <label for="kind">文件类型 <span class="req">*</span></label>
+      <select id="kind" name="kind" required>
+        <option value="">请选择</option>
+        {% for kind in kinds %}
+          <option value="{{ kind }}" {% if form.kind == kind %}selected{% endif %}>{{ kind_labels[kind] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="parent_id">父文件 ID</label>
+      <input id="parent_id" name="parent_id" maxlength="64"
+             pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}"
+             placeholder="原始测量留空；清洗/汇总填写准确父 ID" value="{{ form.parent_id or '' }}">
+      <small>父项必须已登记、类型匹配且未撤销。</small>
+    </div>
+    <div class="field">
+      <label for="file">CSV 文件 <span class="req">*</span></label>
+      <input id="file" type="file" name="file" accept=".csv,text/csv" required>
+      <small>UTF-8 CSV，上限 {{ max_mb }} MiB；写盘或登记失败不会留下半成品。</small>
+    </div>
+    <button type="submit" class="btn btn-primary">登记并锁定依赖</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>文件清单</h2>
+  {% if not files %}
+    <p class="empty">尚无登记文件。请从上方登记第一份原始测量。</p>
+  {% else %}
+  <div class="table-scroll">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>文件 ID</th><th>类型</th><th>父文件</th><th>状态</th>
+          <th>依赖</th><th>登记时间</th><th>下载</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for f in files %}
+        {% set row = f.row %}
+        <tr class="{% if not f.eligible %}row-blocked{% endif %}" data-file-id="{{ row.id }}">
+          <td>
+            <a class="mono" href="{{ url_for('file_detail', file_id=row.id) }}">{{ row.id }}</a>
+            <div class="sub">{{ row.original_filename }}</div>
+          </td>
+          <td>{{ kind_labels[row.kind] }}</td>
+          <td>
+            {% if row.parent_id %}
+              <a class="mono" href="{{ url_for('file_detail', file_id=row.parent_id) }}">{{ row.parent_id }}</a>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if row.revoked_at %}
+              <span class="badge badge-revoked">已撤销</span>
+              <div class="sub">{{ row.revoked_by }}</div>
+            {% elif f.blocker %}
+              <span class="badge badge-blocked">已停止下载</span>
+              <div class="sub">因 <a class="mono" href="{{ url_for('file_detail', file_id=f.blocker['id']) }}">{{ f.blocker['id'] }}</a> 撤销</div>
+            {% else %}
+              <span class="badge badge-live">可下载</span>
+            {% endif %}
+          </td>
+          <td>{{ f.descendant_count }} 个下游</td>
+          <td class="sub">{{ row.created_at }}</td>
+          <td>
+            {% if f.eligible %}
+              <a class="btn btn-small" href="{{ url_for('download', file_id=row.id) }}">下载</a>
+            {% else %}
+              <span class="muted">已停止</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

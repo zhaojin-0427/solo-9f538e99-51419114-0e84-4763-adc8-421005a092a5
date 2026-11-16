@@ -1,0 +1,4 @@
+condition,timepoint_months,n,mean_assay_pct,max_impurity_a_pct
+25C/60RH,0,2,99.95,0.05
+25C/60RH,3,1,99.4,0.08
+25C/60RH,6,1,98.9,0.12
